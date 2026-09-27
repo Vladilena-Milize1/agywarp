@@ -7,6 +7,12 @@ use ratatui::{
     Frame,
 };
 
+// High-contrast, theme-adaptive color definitions
+const ACCENT_COLOR: Color = Color::Blue;
+const SUCCESS_COLOR: Color = Color::Green;
+const ERROR_COLOR: Color = Color::Red;
+const WARN_COLOR: Color = Color::Indexed(166); // Warm amber/orange, visible on both light and dark themes
+
 pub fn draw(f: &mut Frame, app: &mut App) {
     let size = f.area();
 
@@ -27,13 +33,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
 fn draw_header(f: &mut Frame, area: Rect) {
     let header_text = Line::from(vec![
-        Span::styled(" agywarp ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::raw("— Process Routing via Cloudflare WARP & Mihomo Core"),
+        Span::styled(" agywarp ", Style::default().fg(ACCENT_COLOR).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "— Process Routing via Cloudflare WARP & Mihomo Core",
+            Style::default().add_modifier(Modifier::DIM),
+        ),
     ]);
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(Style::default().add_modifier(Modifier::DIM));
 
     let paragraph = Paragraph::new(header_text)
         .block(block)
@@ -43,7 +52,6 @@ fn draw_header(f: &mut Frame, area: Rect) {
 }
 
 fn draw_main(f: &mut Frame, area: Rect, app: &mut App) {
-    // Split into Left (Network + Processes) and Right (Console)
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -67,19 +75,24 @@ fn draw_main(f: &mut Frame, area: Rect, app: &mut App) {
 
 fn draw_network_card(f: &mut Frame, area: Rect, app: &App) {
     let is_focused = app.focus == FocusArea::NetworkCard;
-    let border_color = if is_focused { Color::Cyan } else { Color::DarkGray };
-
-    let service_style = if app.service_active {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+    let border_style = if is_focused {
+        Style::default().fg(ACCENT_COLOR).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::Red)
+        Style::default().add_modifier(Modifier::DIM)
     };
-    let service_text = if app.service_active { "ACTIVE (ON)" } else { "INACTIVE (OFF)" };
 
-    let warp_style = if app.warp_status == "CONNECTED" {
-        Style::default().fg(Color::Green)
+    let (service_text, service_style) = if app.service_active {
+        ("ACTIVE (ON)", Style::default().fg(SUCCESS_COLOR).add_modifier(Modifier::BOLD))
     } else {
-        Style::default().fg(Color::Yellow)
+        ("INACTIVE (OFF)", Style::default().fg(ERROR_COLOR).add_modifier(Modifier::BOLD))
+    };
+
+    let (warp_text, warp_style) = if app.warp_status == "CONNECTED" {
+        ("CONNECTED", Style::default().fg(SUCCESS_COLOR).add_modifier(Modifier::BOLD))
+    } else if !app.warp_installed {
+        ("NOT INSTALLED", Style::default().fg(ERROR_COLOR).add_modifier(Modifier::BOLD))
+    } else {
+        (&app.warp_status[..], Style::default().fg(WARN_COLOR).add_modifier(Modifier::BOLD))
     };
 
     let exit_line = if let Some(ref exit) = app.exit_info {
@@ -94,36 +107,36 @@ fn draw_network_card(f: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::raw("Routing Service: "),
             Span::styled(service_text, service_style),
-            Span::raw("  (Press [Space] to toggle)"),
+            Span::styled("  (Press [Space] to toggle)", Style::default().add_modifier(Modifier::DIM)),
         ]),
         Line::from(vec![
             Span::raw("Current Node:    "),
-            Span::styled(&app.current_node, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(&app.current_node, Style::default().add_modifier(Modifier::BOLD)),
         ]),
         Line::from(vec![
             Span::raw("Airport/Source:  "),
-            Span::styled(&app.airport_name, Style::default().fg(Color::White)),
+            Span::styled(&app.airport_name, Style::default().add_modifier(Modifier::BOLD)),
         ]),
         Line::from(vec![
             Span::raw("WARP Daemon:     "),
-            Span::styled(&app.warp_status, warp_style),
-            Span::raw(format!("  (Port: {})", app.warp_port)),
+            Span::styled(warp_text, warp_style),
+            Span::styled(format!("  (Port: {})", app.warp_port), Style::default().add_modifier(Modifier::DIM)),
         ]),
         Line::from(vec![
             Span::raw("Protocol Mode:   "),
-            Span::styled(app.proxy_mode.as_str().to_uppercase(), Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-            Span::raw("  (Press [p] to change)"),
+            Span::styled(app.proxy_mode.as_str().to_uppercase(), Style::default().fg(ACCENT_COLOR).add_modifier(Modifier::BOLD)),
+            Span::styled("  (Press [p] to change)", Style::default().add_modifier(Modifier::DIM)),
         ]),
         Line::from(vec![
             Span::raw("WARP Exit IP:    "),
-            Span::styled(exit_line, Style::default().fg(Color::Cyan)),
+            Span::styled(exit_line, Style::default().fg(ACCENT_COLOR)),
         ]),
     ];
 
     let block = Block::default()
         .title(" Network Card ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(border_style);
 
     let paragraph = Paragraph::new(text).block(block);
     f.render_widget(paragraph, area);
@@ -131,7 +144,11 @@ fn draw_network_card(f: &mut Frame, area: Rect, app: &App) {
 
 fn draw_process_list(f: &mut Frame, area: Rect, app: &App) {
     let is_focused = app.focus == FocusArea::ProcessList;
-    let border_color = if is_focused { Color::Cyan } else { Color::DarkGray };
+    let border_style = if is_focused {
+        Style::default().fg(ACCENT_COLOR).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().add_modifier(Modifier::DIM)
+    };
 
     let items: Vec<ListItem> = app
         .profiles
@@ -140,9 +157,9 @@ fn draw_process_list(f: &mut Frame, area: Rect, app: &App) {
         .map(|(idx, profile)| {
             let is_selected = idx == app.selected_profile_idx;
             let (status_text, status_color) = if profile.enabled {
-                ("[ON] ", Color::Green)
+                ("[ON] ", SUCCESS_COLOR)
             } else {
-                ("[OFF]", Color::DarkGray)
+                ("[OFF]", ERROR_COLOR)
             };
 
             let prefix = if is_selected { "▶ " } else { "  " };
@@ -154,13 +171,11 @@ fn draw_process_list(f: &mut Frame, area: Rect, app: &App) {
                 .collect();
 
             let line = Line::from(vec![
-                Span::styled(prefix, Style::default().fg(Color::Cyan)),
+                Span::styled(prefix, Style::default().fg(ACCENT_COLOR).add_modifier(Modifier::BOLD)),
                 Span::styled(status_text, Style::default().fg(status_color).add_modifier(Modifier::BOLD)),
                 Span::raw(" "),
-                Span::styled(&profile.label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                Span::raw(" ("),
-                Span::styled(matchers_summary.join(", "), Style::default().fg(Color::DarkGray)),
-                Span::raw(")"),
+                Span::styled(&profile.label, Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(format!(" ({})", matchers_summary.join(", ")), Style::default().add_modifier(Modifier::DIM)),
             ]);
 
             ListItem::new(line)
@@ -170,7 +185,7 @@ fn draw_process_list(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .title(" Process Groups ([Space] Toggle, [↑/↓] Select) ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(border_style);
 
     let list = List::new(items).block(block);
     f.render_widget(list, area);
@@ -178,29 +193,33 @@ fn draw_process_list(f: &mut Frame, area: Rect, app: &App) {
 
 fn draw_console(f: &mut Frame, area: Rect, app: &App) {
     let is_focused = app.focus == FocusArea::Console;
-    let border_color = if is_focused { Color::Cyan } else { Color::DarkGray };
+    let border_style = if is_focused {
+        Style::default().fg(ACCENT_COLOR).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().add_modifier(Modifier::DIM)
+    };
 
     let logs: Vec<Line> = app
         .logs
         .iter()
         .map(|l| {
-            let color = if l.contains("[OK]") {
-                Color::Green
+            let style = if l.contains("[OK]") {
+                Style::default().fg(SUCCESS_COLOR)
             } else if l.contains("[WARN]") {
-                Color::Yellow
+                Style::default().fg(WARN_COLOR)
             } else if l.contains("[ERROR]") {
-                Color::Red
+                Style::default().fg(ERROR_COLOR).add_modifier(Modifier::BOLD)
             } else {
-                Color::Gray
+                Style::default() // Respects terminal foreground (black on light theme, white on dark theme)
             };
-            Line::from(Span::styled(l, Style::default().fg(color)))
+            Line::from(Span::styled(l, style))
         })
         .collect();
 
     let block = Block::default()
         .title(" Output Console ([↑/↓] Scroll) ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(border_style);
 
     let paragraph = Paragraph::new(logs)
         .block(block)
@@ -218,13 +237,13 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     };
 
     let text = Line::from(vec![
-        Span::styled(format!(" [{}] ", focus_hint), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::raw(" | [Tab] Switch Focus | [Space] Toggle | [p] Protocol | [r] Refresh | [q] Quit"),
+        Span::styled(format!(" [{}] ", focus_hint), Style::default().fg(ACCENT_COLOR).add_modifier(Modifier::BOLD)),
+        Span::styled(" | [Tab] Switch Focus | [Space] Toggle | [p] Protocol | [r] Refresh | [q] Quit", Style::default().add_modifier(Modifier::DIM)),
     ]);
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(Style::default().add_modifier(Modifier::DIM));
 
     let paragraph = Paragraph::new(text)
         .block(block)
