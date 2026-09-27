@@ -73,7 +73,15 @@ impl App {
         };
 
         app.log("INFO", "agywarp TUI initialized");
-        app.refresh_status().await;
+        match app.clash_mgr.preflight().await {
+            Ok(check) => {
+                app.log("OK", &format!("Mihomo {} connected (TUN: {})", check.mihomo_version, if check.tun_enabled { "ON" } else { "OFF" }));
+            }
+            Err(e) => {
+                app.log("WARN", &format!("Mihomo controller check: {}", e));
+            }
+        }
+        app.poll_status().await;
         Ok(app)
     }
 
@@ -83,15 +91,14 @@ impl App {
     }
 
     pub async fn refresh_status(&mut self) {
+        self.poll_status().await;
+        self.log("INFO", "Status refreshed");
+    }
+
+    pub async fn poll_status(&mut self) {
         // 1. Inspect Mihomo
-        match self.clash_mgr.preflight().await {
-            Ok(check) => {
-                self.service_active = check.active_session;
-                self.log("OK", &format!("Mihomo {} connected (TUN: {})", check.mihomo_version, if check.tun_enabled { "ON" } else { "OFF" }));
-            }
-            Err(e) => {
-                self.log("WARN", &format!("Mihomo controller check: {}", e));
-            }
+        if let Ok(check) = self.clash_mgr.preflight().await {
+            self.service_active = check.active_session;
         }
 
         // 2. Inspect active airport / subscription
@@ -335,6 +342,7 @@ pub async fn run_tui() -> Result<()> {
         }
 
         if last_tick.elapsed() >= tick_rate {
+            app.poll_status().await;
             last_tick = Instant::now();
         }
 

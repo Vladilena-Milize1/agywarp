@@ -402,6 +402,7 @@ pub fn build_runtime_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::app::App;
 
     #[test]
     fn test_build_runtime_config() {
@@ -428,6 +429,26 @@ rules:
         assert!(result.contains("PROCESS-NAME,warp-svc.exe,HK Node"));
         assert!(result.contains("PROCESS-NAME,agy.exe,AGYWARP-WARP"));
         assert!(result.contains("port: 40000"));
+    }
+
+    #[test]
+    fn test_parse_real_profiles() {
+        let p = PathBuf::from(r"C:\Users\teerain\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev\profiles.yaml");
+        if p.exists() {
+            let data = fs::read_to_string(&p).unwrap();
+            let parsed = serde_yaml::from_str::<VergeProfiles>(&data);
+            println!("Parsed profiles result: {:?}", parsed);
+            assert!(parsed.is_ok(), "Failed to parse profiles: {:?}", parsed.err());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_app_refresh_status() {
+        let app = App::new().await.unwrap();
+        println!("App airport_name: {:?}", app.airport_name);
+        println!("App current_node: {:?}", app.current_node);
+        assert_ne!(app.airport_name, "---");
+        assert_ne!(app.current_node, "---");
     }
 
     #[test]
